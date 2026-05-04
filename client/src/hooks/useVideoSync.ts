@@ -1,6 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import type { Socket } from 'socket.io-client';
-import type { VideoState } from '../types';
 
 interface UseSyncOptions {
   socket: Socket | null;
