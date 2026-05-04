@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, MutableRefObject } from 'react';
+import { useState, useRef, useEffect, useCallback, type MutableRefObject } from 'react';
 import { detectVideoType, extractYouTubeId, isDRMProtected } from '../../types';
 import type { VideoSourceType } from '../../types';
 
