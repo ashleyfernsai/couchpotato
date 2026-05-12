@@ -25,7 +25,6 @@ export default function WatchRoom() {
     chatHistory?: any;
   } | null;
 
-  const _nickname = state?.nickname || 'You';
   const isHost = state?.isHost ?? true;
 
   const [partnerNickname, setPartnerNickname] = useState(state?.partnerNickname || '');
