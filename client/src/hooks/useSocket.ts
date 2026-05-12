@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { getSocket, disconnectSocket } from '../services/socket';
 import type { ConnectionStatus } from '../types';
 import type { Socket } from 'socket.io-client';
@@ -6,60 +6,64 @@ import type { Socket } from 'socket.io-client';
 export function useSocket() {
   const socketRef = useRef<Socket | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
+  // Expose socket as state so consumers re-render when it becomes available
+  const [socket, setSocket] = useState<Socket | null>(null);
 
   useEffect(() => {
-    const socket = getSocket();
-    socketRef.current = socket;
+    const s = getSocket();
+    socketRef.current = s;
+    setSocket(s);
 
-    socket.on('connect', () => {
-      console.log('[Socket] Connected:', socket.id);
+    s.on('connect', () => {
+      console.log('[Socket] Connected:', s.id);
       setStatus('connected');
     });
 
-    socket.on('disconnect', () => {
+    s.on('disconnect', () => {
       console.log('[Socket] Disconnected');
       setStatus('disconnected');
     });
 
-    socket.on('reconnect_attempt', (attempt: number) => {
+    s.on('reconnect_attempt', (attempt: number) => {
       console.log(`[Socket] Reconnecting... attempt ${attempt}`);
       setStatus('reconnecting');
     });
 
-    socket.on('reconnect', () => {
+    s.on('reconnect', () => {
       console.log('[Socket] Reconnected');
       setStatus('connected');
     });
 
-    socket.on('connect_error', (err: Error) => {
+    s.on('connect_error', (err: Error) => {
       console.error('[Socket] Connection error:', err.message);
       setStatus('reconnecting');
     });
 
-    if (!socket.connected) {
+    if (!s.connected) {
       setStatus('connecting');
-      socket.connect();
+      s.connect();
     } else {
       setStatus('connected');
     }
 
     return () => {
-      socket.off('connect');
-      socket.off('disconnect');
-      socket.off('reconnect_attempt');
-      socket.off('reconnect');
-      socket.off('connect_error');
+      s.off('connect');
+      s.off('disconnect');
+      s.off('reconnect_attempt');
+      s.off('reconnect');
+      s.off('connect_error');
     };
   }, []);
 
   const disconnect = useCallback(() => {
     disconnectSocket();
     socketRef.current = null;
+    setSocket(null);
     setStatus('disconnected');
   }, []);
 
   return {
-    socket: socketRef.current,
+    socket,
     status,
     disconnect,
   };

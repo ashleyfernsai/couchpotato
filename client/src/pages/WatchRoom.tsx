@@ -71,8 +71,10 @@ export default function WatchRoom() {
     const handlePartnerJoined = (data: { nickname: string }) => {
       setPartnerNickname(data.nickname);
       setPartnerConnected(true);
-      // Start WebRTC call when partner joins
-      webrtc.startCall();
+      // Host starts call when partner joins
+      if (isHost) {
+        webrtc.startCall();
+      }
     };
 
     const handlePartnerLeft = () => {
@@ -86,14 +88,14 @@ export default function WatchRoom() {
       socket.off('partner-joined', handlePartnerJoined);
       socket.off('partner-left', handlePartnerLeft);
     };
-  }, [socket]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [socket, isHost, webrtc.startCall]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Start WebRTC when joining as guest (partner already in room) ──
+  // ── Guest: start call immediately (host is already in room) ──
   useEffect(() => {
-    if (!isHost && partnerConnected) {
+    if (!isHost && partnerConnected && socket) {
       webrtc.startCall();
     }
-  }, [isHost, partnerConnected]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [socket]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Leave room ──
   const handleLeave = () => {
@@ -139,8 +141,8 @@ export default function WatchRoom() {
           {/* Sync Indicator */}
           {videoUrl && (
             <div className="flex items-center gap-1 text-xs">
-              <span className={sync.syncDrift < 0.5 ? 'text-[var(--color-success)]' : sync.syncDrift < 1 ? 'text-[var(--color-warning)]' : 'text-[var(--color-error)]'}>
-                \u25cf
+              <span className={sync.syncDrift < 0.5 ? 'text-[var(--color-success)]' : sync.syncDrift < 2.5 ? 'text-[var(--color-warning)]' : 'text-[var(--color-error)]'}>
+                ●
               </span>
               <span className="text-[var(--color-text-muted)] hidden sm:inline">
                 {sync.syncDrift < 0.5 ? 'In sync' : `Drift: ${sync.syncDrift.toFixed(1)}s`}
@@ -154,7 +156,7 @@ export default function WatchRoom() {
             className="btn-icon danger text-sm"
             title="Leave room"
           >
-            \u2715
+            ✕
           </button>
         </div>
       </header>
@@ -196,7 +198,7 @@ export default function WatchRoom() {
               }`}
               onClick={() => setMobileTab('call')}
             >
-              \ud83d\udcf9 Video Call
+              📹 Video Call
             </button>
             <button
               className={`flex-1 py-3 text-sm font-medium transition-colors ${
@@ -206,7 +208,7 @@ export default function WatchRoom() {
               }`}
               onClick={() => setMobileTab('chat')}
             >
-              \ud83d\udcac Chat
+              💬 Chat
             </button>
           </div>
 

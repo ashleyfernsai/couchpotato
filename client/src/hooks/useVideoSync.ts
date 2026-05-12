@@ -10,6 +10,11 @@ interface UseSyncOptions {
   pausePlayer?: () => void;
 }
 
+// How long to suppress local events after receiving a remote action
+const REMOTE_ACTION_GUARD_MS = 500;
+// Drift threshold before auto-correcting (seconds)
+const DRIFT_THRESHOLD = 2.5;
+
 export function useVideoSync({
   socket,
   onVideoLoad,
@@ -22,6 +27,7 @@ export function useVideoSync({
   const [syncDrift, setSyncDrift] = useState(0);
   const isRemoteAction = useRef(false);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isPlayingRef = useRef(false);
 
   // ── Listen for partner events ──
   useEffect(() => {
@@ -42,20 +48,23 @@ export function useVideoSync({
       const latency = (Date.now() - data.serverTime) / 2;
       const adjustedTime = data.timestamp + latency / 1000;
 
-      if (data.action === 'seek' || data.action === 'play') {
+      if (data.action === 'seek') {
+        // Seek only — don't change play/pause state
         seekPlayer?.(adjustedTime);
-      }
-
-      if (data.action === 'play') {
+      } else if (data.action === 'play') {
+        // Seek to synced position then play
+        seekPlayer?.(adjustedTime);
         playPlayer?.();
+        isPlayingRef.current = true;
       } else if (data.action === 'pause') {
         pausePlayer?.();
         seekPlayer?.(data.timestamp);
+        isPlayingRef.current = false;
       }
 
       setTimeout(() => {
         isRemoteAction.current = false;
-      }, 100);
+      }, REMOTE_ACTION_GUARD_MS);
     };
 
     const handleHeartbeat = (data: {
@@ -67,10 +76,15 @@ export function useVideoSync({
       const drift = Math.abs(myTime - data.currentTime);
       setSyncDrift(drift);
 
-      // Auto re-sync if drift > 1 second
-      if (drift > 1 && data.isPlaying) {
+      // Only auto-correct if drift is significant AND video is actively playing
+      // Use a higher threshold to avoid interrupting playback constantly
+      if (drift > DRIFT_THRESHOLD && data.isPlaying && isPlayingRef.current) {
         const latency = (Date.now() - data.serverTime) / 2;
+        isRemoteAction.current = true;
         seekPlayer?.(data.currentTime + latency / 1000);
+        setTimeout(() => {
+          isRemoteAction.current = false;
+        }, REMOTE_ACTION_GUARD_MS);
       }
     };
 
@@ -91,9 +105,10 @@ export function useVideoSync({
     };
   }, [socket, onVideoLoad, getPlayerTime, seekPlayer, playPlayer, pausePlayer]);
 
-  // ── Heartbeat (every 5s) ──
+  // ── Heartbeat (every 8s — less aggressive) ──
   const startHeartbeat = useCallback(() => {
     if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+    isPlayingRef.current = true;
     heartbeatRef.current = setInterval(() => {
       if (!socket) return;
       const currentTime = getPlayerTime?.() ?? 0;
@@ -102,10 +117,11 @@ export function useVideoSync({
         isPlaying: true,
         clientTime: Date.now(),
       });
-    }, 5000);
+    }, 8000);
   }, [socket, getPlayerTime]);
 
   const stopHeartbeat = useCallback(() => {
+    isPlayingRef.current = false;
     if (heartbeatRef.current) {
       clearInterval(heartbeatRef.current);
       heartbeatRef.current = null;
@@ -120,11 +136,7 @@ export function useVideoSync({
   const emitPlay = useCallback(
     (time: number) => {
       if (isRemoteAction.current || !socket) return;
-      socket.emit('sync-event', {
-        action: 'play',
-        timestamp: time,
-        clientTime: Date.now(),
-      });
+      socket.emit('sync-event', { action: 'play', timestamp: time, clientTime: Date.now() });
       startHeartbeat();
     },
     [socket, startHeartbeat]
@@ -133,11 +145,7 @@ export function useVideoSync({
   const emitPause = useCallback(
     (time: number) => {
       if (isRemoteAction.current || !socket) return;
-      socket.emit('sync-event', {
-        action: 'pause',
-        timestamp: time,
-        clientTime: Date.now(),
-      });
+      socket.emit('sync-event', { action: 'pause', timestamp: time, clientTime: Date.now() });
       stopHeartbeat();
     },
     [socket, stopHeartbeat]
@@ -146,11 +154,7 @@ export function useVideoSync({
   const emitSeek = useCallback(
     (time: number) => {
       if (isRemoteAction.current || !socket) return;
-      socket.emit('sync-event', {
-        action: 'seek',
-        timestamp: time,
-        clientTime: Date.now(),
-      });
+      socket.emit('sync-event', { action: 'seek', timestamp: time, clientTime: Date.now() });
     },
     [socket]
   );
